@@ -1,0 +1,38 @@
+---
+title: "TRN promoters"
+output: html_document
+---
+The script finds the promoter sequences for all the TRN-enriched genes listed in Irini's PNAS paper for TRN microarray results
+
+```{r}
+# setting up the environment
+library(BSgenome)
+library(BSgenome.Celegans.UCSC.ce10)
+Celegans <- BSgenome.Celegans.UCSC.ce10 #WS220
+library(GenomicFeatures)
+txdb <- makeTxDbFromUCSC("ce10", "refGene") # this process take time
+
+# converts gene_symbols to gene_ids and map to genomic locations in txdb
+library("org.Ce.eg.db")
+x <- org.Ce.egSYMBOL2EG # requires the loading of org.Ce.eg.db
+# Get the entrez gene identifiers that are mapped to a gene symbol
+mapped_genes <- mappedkeys(x)
+# Convert to a list
+xx <- as.list(x[mapped_genes])
+# covert the list to a data.frame solves the problem of having quotes in the names
+xx_df <- do.call(rbind, lapply(xx, data.frame, stringsAsFactors=FALSE))
+colnames(xx_df) <- c("Entrez_gene_id")
+
+gs <- c("mec-3","mec-7")
+xx_df[gs,]
+xx$"mec-7"
+
+```
+
+You can also embed plots, for example:
+
+```{r, echo=FALSE}
+plot(cars)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
