@@ -10,7 +10,14 @@ library(BSgenome)
 library(BSgenome.Celegans.UCSC.ce10)
 Celegans <- BSgenome.Celegans.UCSC.ce10 #WS220
 library(GenomicFeatures)
+library(GenomicRanges)
 txdb <- makeTxDbFromUCSC("ce10", "refGene") # this process take time
+
+# get the granges for the promoters of all genes
+gn <- sort(genes(txdb))
+# get upstream promoter granges within 1000 bp 
+up1000 <- flank(gn, width=1000)
+up1000 <- trim(up1000) # promoter region
 
 # converts gene_symbols to gene_ids and map to genomic locations in txdb
 library("org.Ce.eg.db")
@@ -22,17 +29,68 @@ xx <- as.list(x[mapped_genes])
 # covert the list to a data.frame solves the problem of having quotes in the names
 xx_df <- do.call(rbind, lapply(xx, data.frame, stringsAsFactors=FALSE))
 colnames(xx_df) <- c("Entrez_gene_id")
+xx_df_2 <- xx_df
+xx_df_2["Gene_name"] <- rownames(xx_df)
+rownames(xx_df_2) <- 1:nrow(xx_df) # 41697 rows
 
-gs <- c("mec-3","mec-7")
-xx_df[gs,]
-xx$"mec-7"
 
+# load a list of TRN genes 
+library("xlsx")
+TRN_genes <- read.xlsx("/Users/cgzheng86/Google Drive/projects for exploration/trans-spliced barcode/TRN genes.xlsx",sheetIndex = 1, colIndex = 1)
+class(TRN_genes)
+nrow(TRN_genes) # 190 genes are loaded into from the excel file with enrichment fold > 4
+TRN_genes_id <- cbind(TRN_genes,xx_df[as.character(TRN_genes[,1]),])
+TRN_genes_id[is.na(TRN_genes_id[,2]),] # nduo-5 and ctc-3 are dropped because they are mtDNA
+TRN_genes_id <- subset(TRN_genes_id, !is.na(TRN_genes_id[,2]))
+nrow(TRN_genes_id) # 188 genes left
+names(TRN_genes_id)[2] <- "Entrez_gene_id"
+write.csv(TRN_genes_id, file = "TRN_genes.csv", quote = FALSE)
+
+# take mec-3 as an example, this is how we find promoter regions and get the sequence
+mec3p <- up1000[up1000$gene_id == "177938"] # this is one 
+class(mec3p) # GRanges
+mec3p_seqs <- getSeq(Celegans, mec3p)
+
+# initiate the grange list with mec-3 promoter and get all the TRN promoters
+TRN_promoter_granges <- mec3p
+for (i in 1:nrow(TRN_genes_id)) {
+    TRN_promoter_granges <- append(TRN_promoter_granges, up1000[up1000$gene_id == as.character(TRN_genes_id$Entrez_gene_id[i])])
+}
+TRN_promoter_granges <- TRN_promoter_granges[(2:188),] # remove the duplicated mec3p used to initiate the grange
+length(TRN_promoter_granges) # now it has 187, which is strange given that TRN_genes_id contains 188 rows 
+score(TRN_promoter_granges) = as.vector(sapply(TRN_promoter_granges$gene_id, function(x) xx_df_2[xx_df_2$Entrez_gene_id == as.character(x),2]))
+names(values(TRN_promoter_granges))[2] <- "gene_name"
+write.csv(as.data.frame(TRN_promoter_granges),file = "TRN_promoters_granges.csv",quote = FALSE)
+
+# Y49E10.8 is missing in the up1000 dataset; now we down to 187 genes 
+setdiff(TRN_genes_id$Entrez_gene_id, TRN_promoter_granges$gene_id) # 13191580 
+xx_df_2[xx_df_2[,1]=="13191580",] # Y49E10.8 is found in the txdb because it is a pseudogene
+select(txdb, key = "13191580", columns = c("TXCHROM", "TXSTART","TXEND","TXSTRAND"), keytype = "GENEID") # no found
+
+# get the actually promoter sequence
+TRN_promoter_sequence <- getSeq(Celegans, TRN_promoter_granges)
+write.csv(as.data.frame(TRN_promoter_sequence), file = "TRN_promoter_sequences.csv", quote = FALSE)
+# this is the cleaned up data, ready to be used for motifsearch in python
+write.table(as.data.frame(TRN_promoter_sequence), file = "TRN_promoter_sequences.txt", quote = FALSE, row.names = FALSE, col.names = FALSE)
 ```
 
-You can also embed plots, for example:
-
-```{r, echo=FALSE}
-plot(cars)
+# get 500bp promoters instead
+```{r}
+up500 <- flank(gn, width=500)
+up500 <-trim(up500)
+mec3p <- up500[up500$gene_id == "177938"] # this is one 
+TRN_promoter_granges_500 <- mec3p
+for (i in 1:nrow(TRN_genes_id)) {
+    TRN_promoter_granges_500 <- append(TRN_promoter_granges_500, up500[up500$gene_id == as.character(TRN_genes_id$Entrez_gene_id[i])])
+}
+TRN_promoter_granges_500 <- TRN_promoter_granges_500[(2:188),] # remove the duplicated mec3p used to initiate the grange
+length(TRN_promoter_granges_500) # now it has 187, which is strange given that TRN_genes_id contains 188 rows 
+score(TRN_promoter_granges_500) = as.vector(sapply(TRN_promoter_granges_500$gene_id, function(x) xx_df_2[xx_df_2$Entrez_gene_id == as.character(x),2]))
+names(values(TRN_promoter_granges_500))[2] <- "gene_name"
+write.csv(as.data.frame(TRN_promoter_granges_500),file = "TRN_promoters_granges_500.csv",quote = FALSE)
+TRN_promoter_sequence_500 <- getSeq(Celegans, TRN_promoter_granges_500)
+write.csv(as.data.frame(TRN_promoter_sequence_500), file = "TRN_promoter_sequences_500.csv", quote = FALSE)
+# this is the cleaned up data, ready to be used for motifsearch in python
+write.table(as.data.frame(TRN_promoter_sequence_500), file = "TRN_promoter_sequences_500.txt", quote = FALSE, row.names = FALSE, col.names = FALSE)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
