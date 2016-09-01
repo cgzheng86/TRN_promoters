@@ -7,7 +7,7 @@ The script finds the promoter sequences for all the TRN-enriched genes listed in
 ```{r}
 # setting up the environment
 library(BSgenome)
-library(BSgenome.Celegans.UCSC.ce10)
+library(BSgenome.Celegans.UCSC.ce10) # BSgenome.Celegans.UCSC.ce11 (2013)
 Celegans <- BSgenome.Celegans.UCSC.ce10 #WS220
 library(GenomicFeatures)
 library(GenomicRanges)
